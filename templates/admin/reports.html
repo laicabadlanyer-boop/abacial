@@ -1,0 +1,538 @@
+{% extends "admin/_base.html" %}
+
+{% block title %}Reports & Analytics • J&T Express{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sidebar-item.active { border-color: #dc2626; background: rgba(220,38,38,.12); }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="card rounded-xl bg-gradient-to-r from-gray-900 via-gray-900 to-black p-3 sm:p-4 md:p-5">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+    <h1 class="text-xl sm:text-2xl md:text-3xl font-bold mb-2">Reports & Analytics</h1>
+    <p class="text-gray-400 text-xs sm:text-sm md:text-base">Comprehensive recruitment analytics and performance metrics.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="exportReport('pdf')" class="px-4 py-2 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/20 hover:border-red-600/40 transition-colors text-xs sm:text-sm font-semibold flex items-center gap-2">
+                <i class="fas fa-file-pdf"></i>
+                <span class="hidden sm:inline">Export PDF</span>
+            </button>
+            <button onclick="exportReport('excel')" class="px-4 py-2 rounded-lg bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-600/20 hover:border-green-600/40 transition-colors text-xs sm:text-sm font-semibold flex items-center gap-2">
+                <i class="fas fa-file-excel"></i>
+                <span class="hidden sm:inline">Export Excel</span>
+            </button>
+            <button onclick="exportReport('csv')" class="px-4 py-2 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/20 hover:border-blue-600/40 transition-colors text-xs sm:text-sm font-semibold flex items-center gap-2">
+                <i class="fas fa-file-csv"></i>
+                <span class="hidden sm:inline">Export CSV</span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- Report Period Selector -->
+<section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4 mb-4">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+        <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+            <i class="fas fa-calendar-alt text-red-400"></i>
+            Report Period
+        </h2>
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400">Current Period:</span>
+            <span class="px-3 py-1.5 rounded-lg bg-red-600/20 text-red-400 text-xs font-semibold" id="current-period-display">
+                {% if period == 'week' %}This Week
+                {% elif period == 'month' %}This Month
+                {% elif period == 'year' %}This Year
+                {% else %}All Time{% endif %}
+            </span>
+        </div>
+    </div>
+    <form method="GET" action="{{ url_for('admin_reports_analytics') }}" id="period-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <input type="hidden" name="period" id="period-input" value="{{ period or 'all' }}">
+        
+        <!-- Period Type Selector -->
+        <fieldset>
+            <legend class="block text-xs text-gray-400 mb-1">Period Type</legend>
+            <div class="flex gap-2" role="group" aria-label="Period Type">
+                <button type="button" data-period="week" 
+                        class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors {{ 'bg-red-600 text-white' if period == 'week' else 'bg-gray-800 text-gray-300 hover:bg-gray-700' }}"
+                        aria-label="Select Week period">
+                    Week
+                </button>
+                <button type="button" data-period="month" 
+                        class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors {{ 'bg-red-600 text-white' if period == 'month' else 'bg-gray-800 text-gray-300 hover:bg-gray-700' }}"
+                        aria-label="Select Month period">
+                    Month
+                </button>
+                <button type="button" data-period="year" 
+                        class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors {{ 'bg-red-600 text-white' if period == 'year' else 'bg-gray-800 text-gray-300 hover:bg-gray-700' }}"
+                        aria-label="Select Year period">
+                    Year
+                </button>
+              
+            </div>
+        </fieldset>
+        
+        <!-- Week Selector -->
+        <div id="week-selector" class="{{ 'hidden' if period != 'week' else '' }}">
+            <label for="week-input" class="block text-xs text-gray-400 mb-1">Select Week</label>
+            <input type="week" name="week" id="week-input" value="{{ selected_week or '' }}" 
+                   class="w-full px-3 py-2 rounded-lg text-sm bg-gray-800 border border-gray-700 text-white focus:border-red-500 focus:outline-none"
+                   aria-label="Select Week">
+    </div>
+        
+        <!-- Month Selector -->
+        <div id="month-selector" class="{{ 'hidden' if period != 'month' else '' }}">
+            <label for="month-input" class="block text-xs text-gray-400 mb-1">Select Month</label>
+            <input type="month" name="month" id="month-input" value="{{ selected_month or '' }}" 
+                   class="w-full px-3 py-2 rounded-lg text-sm bg-gray-800 border border-gray-700 text-white focus:border-red-500 focus:outline-none"
+                   aria-label="Select Month">
+    </div>
+        
+        <!-- Year Selector -->
+        <div id="year-selector" class="{{ 'hidden' if period != 'year' else '' }}">
+            <label for="year-input" class="block text-xs text-gray-400 mb-1">Select Year</label>
+            <select name="year" id="year-input" class="w-full px-3 py-2 rounded-lg text-sm bg-gray-800 border border-gray-700 text-white focus:border-red-500 focus:outline-none"
+                    aria-label="Select Year">
+                <option value="">Select Year</option>
+                {% for y in available_years %}
+                <option value="{{ y }}" {% if selected_year == y|string %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+    </div>
+        
+        <!-- Generate Report Button -->
+        <div class="flex items-end">
+            <button type="submit" class="w-full px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm font-semibold">
+                <i class="fas fa-filter mr-2"></i>Generate Report
+            </button>
+    </div>
+    </form>
+    
+    <!-- Period Summary -->
+    {% if period_summary %}
+    <div class="mt-4 pt-4 border-t border-gray-800">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+            <div>
+                <p class="text-xs text-gray-400 mb-1">Period Start</p>
+                <p class="text-sm font-semibold text-white">{{ period_summary.start_date or '—' }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-400 mb-1">Period End</p>
+                <p class="text-sm font-semibold text-white">{{ period_summary.end_date or '—' }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-400 mb-1">Total Days</p>
+                <p class="text-sm font-semibold text-white">{{ period_summary.total_days or 0 }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-400 mb-1">Report Generated</p>
+                <p class="text-sm font-semibold text-green-400">{{ period_summary.generated_at or '—' }}</p>
+    </div>
+    </div>
+    </div>
+    {% endif %}
+</section>
+
+<!-- Report Sections -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <!-- Applicant Summary Report -->
+    <section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <i class="fas fa-users text-blue-400"></i>
+                Applicant Summary Report
+    </h2>
+            <button onclick="exportSection('applicant_summary')" class="px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/20 text-xs font-semibold flex items-center gap-1">
+                <i class="fas fa-download"></i>
+                Export
+            </button>
+        </div>
+        <div class="space-y-3">
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Total Applicants</span>
+                <span class="text-lg font-bold text-white">{{ applicant_summary.total_applicants or 0 }}</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">New Applicants</span>
+                <span class="text-lg font-bold text-green-400">{{ applicant_summary.new_applicants or 0 }}</span>
+    </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Active Applications</span>
+                <span class="text-lg font-bold text-yellow-400">{{ applicant_summary.active_applications or 0 }}</span>
+    </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">With Resume</span>
+                <span class="text-lg font-bold text-cyan-400">{{ applicant_summary.with_resume or 0 }}</span>
+    </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Verified Email</span>
+                <span class="text-lg font-bold text-purple-400">{{ applicant_summary.verified_email or 0 }}</span>
+    </div>
+    </div>
+</section>
+
+    <!-- Job Vacancy Report -->
+    <section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <i class="fas fa-briefcase text-green-400"></i>
+                Job Vacancy Report
+            </h2>
+            <button onclick="exportSection('job_vacancy')" class="px-3 py-1.5 rounded-lg bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-600/20 text-xs font-semibold flex items-center gap-1">
+                <i class="fas fa-download"></i>
+                Export
+            </button>
+        </div>
+        <div class="space-y-3">
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Total Jobs Posted</span>
+                <span class="text-lg font-bold text-white">{{ job_vacancy.total_jobs or 0 }}</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Active Jobs</span>
+                <span class="text-lg font-bold text-green-400">{{ job_vacancy.active_jobs or 0 }}</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Closed Jobs</span>
+                <span class="text-lg font-bold text-red-400">{{ job_vacancy.closed_jobs or 0 }}</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Total Applications</span>
+                <span class="text-lg font-bold text-yellow-400">{{ job_vacancy.total_applications or 0 }}</span>
+    </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Avg Applications/Job</span>
+                <span class="text-lg font-bold text-cyan-400">{{ job_vacancy.avg_applications_per_job or 0 }}</span>
+    </div>
+    </div>
+</section>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <!-- Hiring Outcome Report -->
+    <section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <i class="fas fa-chart-line text-yellow-400"></i>
+                Hiring Outcome Report
+    </h2>
+            <button onclick="exportSection('hiring_outcome')" class="px-3 py-1.5 rounded-lg bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30 border border-yellow-600/20 text-xs font-semibold flex items-center gap-1">
+                <i class="fas fa-download"></i>
+                Export
+            </button>
+        </div>
+        <div class="space-y-3">
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Total Hired</span>
+                <span class="text-lg font-bold text-green-400">{{ hiring_outcome.total_hired or 0 }}</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Hire Rate</span>
+                <span class="text-lg font-bold text-white">{{ hiring_outcome.hire_rate or 0 }}%</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Avg Time to Hire</span>
+                <span class="text-lg font-bold text-cyan-400">{{ hiring_outcome.avg_time_to_hire or 0 }} days</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Interview to Hire Rate</span>
+                <span class="text-lg font-bold text-purple-400">{{ hiring_outcome.interview_to_hire_rate or 0 }}%</span>
+        </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Rejection Rate</span>
+                <span class="text-lg font-bold text-red-400">{{ hiring_outcome.rejection_rate or 0 }}%</span>
+        </div>
+        </div>
+    </section>
+
+    <!-- HR Performance Report -->
+    <section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+                <i class="fas fa-user-tie text-purple-400"></i>
+                HR Performance Report
+            </h2>
+            <button onclick="exportSection('hr_performance')" class="px-3 py-1.5 rounded-lg bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 border border-purple-600/20 text-xs font-semibold flex items-center gap-1">
+                <i class="fas fa-download"></i>
+                Export
+            </button>
+        </div>
+        <div class="space-y-3">
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Interviews Scheduled</span>
+                <span class="text-lg font-bold text-white">{{ hr_performance.interviews_scheduled or 0 }}</span>
+        </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Interviews Completed</span>
+                <span class="text-lg font-bold text-green-400">{{ hr_performance.interviews_completed or 0 }}</span>
+        </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Applications Reviewed</span>
+                <span class="text-lg font-bold text-yellow-400">{{ hr_performance.applications_reviewed or 0 }}</span>
+        </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Status Updates</span>
+                <span class="text-lg font-bold text-cyan-400">{{ hr_performance.status_updates or 0 }}</span>
+        </div>
+            <div class="flex justify-between items-center p-2 bg-gray-800/50 rounded-lg">
+                <span class="text-xs text-gray-400">Avg Response Time</span>
+                <span class="text-lg font-bold text-purple-400">{{ hr_performance.avg_response_time or 0 }} hours</span>
+        </div>
+    </div>
+</section>
+    </div>
+
+<!-- Detailed Tables -->
+{% if applicant_summary_details %}
+<section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4 mb-4">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+            <i class="fas fa-list text-blue-400"></i>
+            Applicant Summary Details
+    </h2>
+        <button onclick="exportSection('applicant_summary', 'detailed')" class="px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-600/20 text-xs font-semibold flex items-center gap-1">
+            <i class="fas fa-download"></i>
+            Export Detailed
+        </button>
+    </div>
+    <div class="table-container">
+        <table class="w-full text-sm min-w-[800px]">
+            <thead>
+                <tr class="text-gray-400 text-xs uppercase tracking-wide border-b border-gray-800">
+                    <th class="py-3 text-left px-2">Applicant Name</th>
+                    <th class="py-3 text-left px-2">Email</th>
+                    <th class="py-3 text-left px-2">Applications</th>
+                    <th class="py-3 text-left px-2">Status</th>
+                    <th class="py-3 text-left px-2">Last Activity</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-800">
+                {% for app in applicant_summary_details %}
+                <tr class="hover:bg-gray-800/50 transition-colors">
+                    <td class="py-4 px-2 font-semibold text-white">{{ app.applicant_name or '—' }}</td>
+                    <td class="py-4 px-2 text-gray-300">{{ app.email or '—' }}</td>
+                    <td class="py-4 px-2 text-gray-300">{{ app.total_applications or 0 }}</td>
+                    <td class="py-4 px-2">
+                        <span class="px-2 py-1 rounded-full text-xs bg-blue-600/20 text-blue-400">{{ app.current_status or '—' }}</span>
+                    </td>
+                    <td class="py-4 px-2 text-gray-400 text-xs">{{ app.last_activity or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{% if job_vacancy_details %}
+<section class="content-section card rounded-xl bg-gray-900/80 p-3 sm:p-4 mb-4">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm sm:text-base font-semibold flex items-center gap-2">
+            <i class="fas fa-list text-green-400"></i>
+            Job Vacancy Details
+    </h2>
+        <button onclick="exportSection('job_vacancy', 'detailed')" class="px-3 py-1.5 rounded-lg bg-green-600/20 text-green-400 hover:bg-green-600/30 border border-green-600/20 text-xs font-semibold flex items-center gap-1">
+            <i class="fas fa-download"></i>
+            Export Detailed
+        </button>
+    </div>
+    <div class="table-container">
+        <table class="w-full text-sm min-w-[800px]">
+            <thead>
+                <tr class="text-gray-400 text-xs uppercase tracking-wide border-b border-gray-800">
+                    <th class="py-3 text-left px-2">Job Title</th>
+                    <th class="py-3 text-left px-2">Branch</th>
+                    <th class="py-3 text-left px-2">Status</th>
+                    <th class="py-3 text-left px-2">Applications</th>
+                    <th class="py-3 text-left px-2">Posted Date</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-800">
+                {% for job in job_vacancy_details %}
+                <tr class="hover:bg-gray-800/50 transition-colors">
+                    <td class="py-4 px-2 font-semibold text-white">{{ job.job_title or '—' }}</td>
+                    <td class="py-4 px-2 text-gray-300">{{ job.branch_name or '—' }}</td>
+                    <td class="py-4 px-2">
+                        <span class="px-2 py-1 rounded-full text-xs {{ 'bg-green-600/20 text-green-400' if job.status == 'active' else 'bg-red-600/20 text-red-400' }}">{{ job.status or '—' }}</span>
+                    </td>
+                    <td class="py-4 px-2 text-gray-300">{{ job.application_count or 0 }}</td>
+                    <td class="py-4 px-2 text-gray-400 text-xs">{{ job.posted_date or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Period selection
+let isInitializing = false;
+function setPeriod(periodType, autoSubmit = false) {
+    if (!periodType) return;
+    
+    const periodInput = document.getElementById('period-input');
+    if (!periodInput) return;
+    
+    periodInput.value = periodType;
+    
+    // Show/hide selectors
+    const weekSelector = document.getElementById('week-selector');
+    const monthSelector = document.getElementById('month-selector');
+    const yearSelector = document.getElementById('year-selector');
+    const currentPeriodDisplay = document.getElementById('current-period-display');
+    
+    if (weekSelector) weekSelector.classList.toggle('hidden', periodType !== 'week');
+    if (monthSelector) monthSelector.classList.toggle('hidden', periodType !== 'month');
+    if (yearSelector) yearSelector.classList.toggle('hidden', periodType !== 'year');
+    
+    // Update display
+    const labels = {
+        'week': 'This Week',
+        'month': 'This Month',
+        'year': 'This Year',
+        'all': 'All Time'
+    };
+    if (currentPeriodDisplay) {
+        currentPeriodDisplay.textContent = labels[periodType] || 'All Time';
+    }
+    
+    // Clear date inputs when changing period type (only if not initializing)
+    if (!isInitializing) {
+        const weekInput = document.getElementById('week-input');
+        const monthInput = document.getElementById('month-input');
+        const yearInput = document.getElementById('year-input');
+        
+        if (weekInput && periodType !== 'week') {
+            weekInput.value = '';
+        }
+        if (monthInput && periodType !== 'month') {
+            monthInput.value = '';
+        }
+        if (yearInput && periodType !== 'year') {
+            yearInput.value = '';
+        }
+    }
+    
+    // Only auto-submit if explicitly requested (user clicked button, not on page load)
+    if (autoSubmit && periodType === 'all') {
+        const form = document.getElementById('period-form');
+        if (form) {
+            form.submit();
+        }
+    }
+}
+
+// Export full report
+function exportReport(format) {
+    const period = document.getElementById('period-input').value || 'all';
+    const week = document.getElementById('week-input')?.value || '';
+    const month = document.getElementById('month-input')?.value || '';
+    const year = document.getElementById('year-input')?.value || '';
+    
+    let url = `{{ url_for('admin_reports_analytics') }}?export=${format}&period=${period}`;
+    if (week) url += `&week=${week}`;
+    if (month) url += `&month=${month}`;
+    if (year) url += `&year=${year}`;
+    
+    // Use location.href for proper download
+    window.location.href = url;
+}
+
+// Export specific section
+function exportSection(section, type = 'summary') {
+    const period = document.getElementById('period-input').value || 'all';
+    const week = document.getElementById('week-input')?.value || '';
+    const month = document.getElementById('month-input')?.value || '';
+    const year = document.getElementById('year-input')?.value || '';
+    
+    // Show format selection dialog
+    const formatOptions = ['csv', 'excel', 'pdf'];
+    let format = '';
+    
+    // Create a simple selection dialog
+    const userChoice = prompt(`Export ${section.replace('_', ' ')} as:\n1. CSV\n2. Excel\n3. PDF\n\nEnter number (1-3) or format name:`, '2');
+    
+    if (!userChoice) {
+        return; // User cancelled
+    }
+    
+    // Parse user input
+    const choice = userChoice.trim().toLowerCase();
+    if (choice === '1' || choice === 'csv') {
+        format = 'csv';
+    } else if (choice === '2' || choice === 'excel' || choice === 'xlsx') {
+        format = 'excel';
+    } else if (choice === '3' || choice === 'pdf') {
+        format = 'pdf';
+        } else {
+        alert('Invalid format. Please choose CSV, Excel, or PDF.');
+        return;
+    }
+    
+    let url = `{{ url_for('admin_reports_analytics') }}?export=${format}&section=${section}&type=${type}&period=${period}`;
+    if (week) url += `&week=${week}`;
+    if (month) url += `&month=${month}`;
+    if (year) url += `&year=${year}`;
+    
+    // Open in same window for download
+    window.location.href = url;
+}
+
+// Initialize period selector visibility on page load
+document.addEventListener('DOMContentLoaded', function() {
+    isInitializing = true;
+    const period = '{{ period or "all" }}';
+    if (period) {
+        setPeriod(period, false); // Don't auto-submit on page load
+    }
+    isInitializing = false;
+    
+    // Prevent form from submitting on Enter key
+    const form = document.getElementById('period-form');
+    if (form) {
+        form.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Prevent form submission if all inputs are empty and period is not 'all'
+        form.addEventListener('submit', function(e) {
+            const periodValue = document.getElementById('period-input')?.value || 'all';
+            if (periodValue !== 'all') {
+                const week = document.getElementById('week-input')?.value || '';
+                const month = document.getElementById('month-input')?.value || '';
+                const year = document.getElementById('year-input')?.value || '';
+                
+                if (!week && !month && !year) {
+                    e.preventDefault();
+                    alert('Please select a date for the selected period type.');
+                    return false;
+        }
+    }
+});
+    }
+    
+    // Add click handlers to period buttons
+    const periodButtons = document.querySelectorAll('button[data-period]');
+    periodButtons.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const periodType = this.getAttribute('data-period');
+            if (periodType) {
+                setPeriod(periodType, periodType === 'all');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
